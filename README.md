@@ -1,6 +1,6 @@
 # Firefighter: Inferno Run
 
-An endless 3D firefighting survival prototype built with **Next.js**, vanilla **Three.js**, **TailwindCSS**, and **Zustand**. The experience emulates high-pressure rescue scenarios where the player balances oxygen, water, and powerups while navigating hazardous fire zones.
+An endless 3D firefighting survival prototype built with **Next.js**, **React Three Fiber**, **GSAP**, **TailwindCSS**, and **Zustand**. The experience emulates high-pressure rescue scenarios where the player balances oxygen, water, and powerups while navigating hazardous fire zones.
 
 ## Getting Started
 
@@ -12,20 +12,6 @@ npm run dev
 ```
 
 Then open [http://localhost:3000](http://localhost:3000) to explore the scene.
-
-### One-click startup on Windows
-
-For Windows users, a helper script is available to install dependencies (if possible) and start the dev server automatically:
-
-```bat
-play-inferno-run.bat
-```
-
-If npm packages cannot be downloaded (e.g. due to restrictive firewalls), the script will automatically open a standalone offline preview located at `offline/inferno-offline.html`. This HTML file mirrors the core loop using a self-contained Three.js scene delivered straight from a CDN, so you can experience the prototype without a local Node.js toolchain.
-
-### Manual offline preview
-
-Open the offline preview directly by double-clicking `offline/inferno-offline.html` (or serving it via any static web server). The page renders the cinematic inferno arena, vitals HUD, and autonomous game loop entirely in the browser with no npm install required.
 
 ## Project Structure
 
