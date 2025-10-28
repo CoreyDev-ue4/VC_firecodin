@@ -1,0 +1,9 @@
+{
+  "name": "Firefighter: Inferno Run",
+  "short_name": "Inferno Run",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#ff4b1f",
+  "icons": []
+}
