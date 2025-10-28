@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Firefighter: Inferno Run – Offline</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Inter", system-ui, sans-serif;
+        background: radial-gradient(circle at top, rgba(255, 125, 69, 0.08), transparent 55%),
+          radial-gradient(circle at bottom, rgba(62, 197, 255, 0.06), transparent 45%), #050507;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2.5rem;
+        color: #f8f9ff;
+      }
+
+      .wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+        align-items: center;
+        padding: 1rem 1.5rem 2rem;
+        border-radius: 24px;
+        background: rgba(12, 12, 16, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 35px 120px rgba(255, 90, 0, 0.2);
+        backdrop-filter: blur(24px);
+      }
+
+      h1 {
+        margin: 0;
+        font-weight: 600;
+        letter-spacing: 0.35em;
+        font-size: clamp(1.35rem, 2.8vw, 2rem);
+        text-align: center;
+      }
+
+      p {
+        max-width: 540px;
+        text-align: center;
+        margin: 0;
+        font-size: 0.95rem;
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      canvas {
+        width: min(960px, 92vw);
+        height: auto;
+        border-radius: 22px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: #010203;
+      }
+
+      .overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(4, 4, 7, 0.68);
+        border-radius: 22px;
+        backdrop-filter: blur(12px);
+      }
+
+      .overlay button {
+        appearance: none;
+        border: none;
+        padding: 0.85rem 2.8rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        letter-spacing: 0.3em;
+        font-weight: 600;
+        color: #040407;
+        cursor: pointer;
+        background: linear-gradient(90deg, #ff8132, #ff452a, #ffcc33);
+        box-shadow: 0 20px 40px rgba(255, 80, 0, 0.25);
+      }
+
+      .stats {
+        width: min(960px, 92vw);
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 0.75rem;
+      }
+
+      .stat {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        padding: 0.75rem 1rem;
+        border-radius: 16px;
+        background: rgba(6, 8, 12, 0.75);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      .stat span:first-child {
+        font-size: 0.6rem;
+        letter-spacing: 0.28em;
+        color: rgba(255, 255, 255, 0.45);
+      }
+
+      .stat span:last-child {
+        font-size: 1rem;
+        font-weight: 600;
+      }
+
+      footer {
+        font-size: 0.6rem;
+        letter-spacing: 0.35em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.35);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrapper">
+      <div>
+        <h1>FIREFIGHTER: INFERNO RUN</h1>
+        <p>
+          Endless 2D survival. Move with WASD or the arrow keys. Spray your hose with Space or J to clear nearby fires and rescue
+          civilians before your vitals run dry.
+        </p>
+      </div>
+      <div style="position: relative">
+        <canvas id="game" width="960" height="540"></canvas>
+        <div class="overlay" id="overlay">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 1rem; text-align: center">
+            <div id="summary" style="font-size: 0.9rem; line-height: 1.6; display: none"></div>
+            <button id="start">START MISSION</button>
+          </div>
+        </div>
+      </div>
+      <div class="stats" id="stats">
+        <div class="stat"><span>Score</span><span id="score">0</span></div>
+        <div class="stat"><span>Time</span><span id="time">0.0s</span></div>
+        <div class="stat"><span>Rescues</span><span id="rescues">0</span></div>
+        <div class="stat"><span>Health</span><span id="health">100%</span></div>
+        <div class="stat"><span>Oxygen</span><span id="oxygen">100%</span></div>
+        <div class="stat"><span>Water</span><span id="water">100%</span></div>
+      </div>
+    </div>
+    <footer>Hold the line.</footer>
+
+    <script>
+      const GAME_WIDTH = 960;
+      const GAME_HEIGHT = 540;
+      const PLAYER_WIDTH = 42;
+      const PLAYER_HEIGHT = 54;
+      const PLAYER_SPEED = 320;
+      const FIRE_SPAWN_INTERVAL = 0.9;
+      const CIVILIAN_SPAWN_INTERVAL = 2.8;
+      const MAX_FIRES = 12;
+      const SPRAY_RANGE = 96;
+      const HUD_INTERVAL = 0.15;
+
+      const canvas = document.getElementById("game");
+      const ctx = canvas.getContext("2d");
+      const overlay = document.getElementById("overlay");
+      const startButton = document.getElementById("start");
+      const summaryBox = document.getElementById("summary");
+
+      const statsEls = {
+        score: document.getElementById("score"),
+        time: document.getElementById("time"),
+        rescues: document.getElementById("rescues"),
+        health: document.getElementById("health"),
+        oxygen: document.getElementById("oxygen"),
+        water: document.getElementById("water")
+      };
+
+      const input = { left: false, right: false, up: false, down: false, spray: false };
+
+      const state = {
+        player: null,
+        fires: [],
+        civilians: [],
+        time: 0,
+        score: 0,
+        rescues: 0,
+        oxygen: 100,
+        water: 100,
+        health: 100,
+        spawnTimer: 0,
+        civilianTimer: 0,
+        hudTimer: 0,
+        difficulty: 0,
+        running: false,
+        lastTime: 0
+      };
+
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      }
+
+      function createPlayer() {
+        return {
+          x: GAME_WIDTH / 2 - PLAYER_WIDTH / 2,
+          y: GAME_HEIGHT - PLAYER_HEIGHT - 24,
+          width: PLAYER_WIDTH,
+          height: PLAYER_HEIGHT,
+          vx: 0,
+          vy: 0
+        };
+      }
+
+      function createFire(seed) {
+        return {
+          x: 96 + Math.random() * (GAME_WIDTH - 192),
+          y: -80,
+          radius: 26 + Math.random() * 18,
+          speed: 120 + seed * 8 + Math.random() * 25
+        };
+      }
+
+      function createCivilian() {
+        return {
+          x: 120 + Math.random() * (GAME_WIDTH - 240),
+          y: -40,
+          width: 26,
+          height: 40,
+          speed: 80 + Math.random() * 25
+        };
+      }
+
+      function circlesOverlap(ax, ay, aradius, bx, by, bradius) {
+        const dx = ax - bx;
+        const dy = ay - by;
+        const distanceSq = dx * dx + dy * dy;
+        const radiusSum = aradius + bradius;
+        return distanceSq <= radiusSum * radiusSum;
+      }
+
+      function rectsOverlap(a, b) {
+        return !(a.x + a.width < b.x || a.x > b.x + b.width || a.y + a.height < b.y || a.y > b.y + b.height);
+      }
+
+      function resetState() {
+        state.player = createPlayer();
+        state.fires = [];
+        state.civilians = [];
+        state.time = 0;
+        state.score = 0;
+        state.rescues = 0;
+        state.oxygen = 100;
+        state.water = 100;
+        state.health = 100;
+        state.spawnTimer = 0;
+        state.civilianTimer = 0;
+        state.hudTimer = 0;
+        state.difficulty = 0;
+        state.lastTime = 0;
+      }
+
+      function handleKeyDown(event) {
+        switch (event.code) {
+          case "ArrowLeft":
+          case "KeyA":
+            input.left = true;
+            break;
+          case "ArrowRight":
+          case "KeyD":
+            input.right = true;
+            break;
+          case "ArrowUp":
+          case "KeyW":
+            input.up = true;
+            break;
+          case "ArrowDown":
+          case "KeyS":
+            input.down = true;
+            break;
+          case "Space":
+          case "KeyJ":
+            input.spray = true;
+            event.preventDefault();
+            break;
+          default:
+            break;
+        }
+      }
+
+      function handleKeyUp(event) {
+        switch (event.code) {
+          case "ArrowLeft":
+          case "KeyA":
+            input.left = false;
+            break;
+          case "ArrowRight":
+          case "KeyD":
+            input.right = false;
+            break;
+          case "ArrowUp":
+          case "KeyW":
+            input.up = false;
+            break;
+          case "ArrowDown":
+          case "KeyS":
+            input.down = false;
+            break;
+          case "Space":
+          case "KeyJ":
+            input.spray = false;
+            break;
+          default:
+            break;
+        }
+      }
+
+      function updatePlayer(dt) {
+        const player = state.player;
+        player.vx = 0;
+        player.vy = 0;
+        if (input.left) player.vx -= 1;
+        if (input.right) player.vx += 1;
+        if (input.up) player.vy -= 1;
+        if (input.down) player.vy += 1;
+        const magnitude = Math.hypot(player.vx, player.vy);
+        if (magnitude > 0) {
+          player.vx = (player.vx / magnitude) * PLAYER_SPEED;
+          player.vy = (player.vy / magnitude) * PLAYER_SPEED;
+        }
+        player.x = clamp(player.x + player.vx * dt, 80, GAME_WIDTH - 80 - player.width);
+        player.y = clamp(player.y + player.vy * dt, 120, GAME_HEIGHT - 48 - player.height);
+      }
+
+      function updateFires(dt) {
+        state.spawnTimer += dt;
+        state.difficulty += dt * 0.15;
+        const spawnInterval = Math.max(0.35, FIRE_SPAWN_INTERVAL - state.difficulty * 0.03);
+        if (state.spawnTimer >= spawnInterval && state.fires.length < MAX_FIRES) {
+          state.spawnTimer = 0;
+          state.fires.push(createFire(state.time));
+        }
+        state.fires.forEach((fire) => {
+          fire.y += fire.speed * dt;
+          fire.speed += dt * 6;
+        });
+        state.fires = state.fires.filter((fire) => fire.y < GAME_HEIGHT + fire.radius);
+      }
+
+      function updateCivilians(dt) {
+        state.civilianTimer += dt;
+        if (state.civilianTimer >= CIVILIAN_SPAWN_INTERVAL) {
+          state.civilianTimer = 0;
+          state.civilians.push(createCivilian());
+        }
+        state.civilians.forEach((civilian) => {
+          civilian.y += civilian.speed * dt;
+        });
+        state.civilians = state.civilians.filter((civilian) => civilian.y < GAME_HEIGHT + civilian.height);
+      }
+
+      function updateResources(dt) {
+        state.time += dt;
+        state.oxygen = clamp(state.oxygen - dt * 6, 0, 100);
+        if (input.spray && state.water > 0) {
+          state.water = clamp(state.water - dt * 28, 0, 100);
+          state.score += dt * 4;
+        } else {
+          state.water = clamp(state.water + dt * 5, 0, 100);
+        }
+
+        const player = state.player;
+        let extraOxygenDrain = 0;
+        state.fires.forEach((fire) => {
+          const distance = Math.hypot(player.x + player.width / 2 - fire.x, player.y - fire.y);
+          if (distance < 120) {
+            extraOxygenDrain += (120 - distance) * 0.04;
+          }
+          if (circlesOverlap(player.x + player.width / 2, player.y + player.height / 2, 26, fire.x, fire.y, fire.radius)) {
+            state.health = clamp(state.health - dt * 35, 0, 100);
+          }
+        });
+        state.oxygen = clamp(state.oxygen - dt * extraOxygenDrain, 0, 100);
+      }
+
+      function handleCollisions() {
+        const playerRect = {
+          x: state.player.x,
+          y: state.player.y,
+          width: state.player.width,
+          height: state.player.height
+        };
+
+        if (input.spray && state.water > 1) {
+          const sprayPoint = { x: state.player.x + state.player.width / 2, y: state.player.y - 32 };
+          state.fires = state.fires.filter((fire) => {
+            if (circlesOverlap(fire.x, fire.y, fire.radius, sprayPoint.x, sprayPoint.y, SPRAY_RANGE)) {
+              state.score += 8;
+              return false;
+            }
+            return true;
+          });
+        }
+
+        state.civilians = state.civilians.filter((civilian) => {
+          if (rectsOverlap(playerRect, civilian)) {
+            state.rescues += 1;
+            state.score += 24;
+            state.oxygen = clamp(state.oxygen + 12, 0, 100);
+            state.water = clamp(state.water + 8, 0, 100);
+            return false;
+          }
+          return true;
+        });
+      }
+
+      function updateHud(dt) {
+        state.hudTimer += dt;
+        if (state.hudTimer >= HUD_INTERVAL) {
+          state.hudTimer = 0;
+          statsEls.score.textContent = Math.round(state.score).toLocaleString();
+          statsEls.time.textContent = `${state.time.toFixed(1)}s`;
+          statsEls.rescues.textContent = state.rescues;
+          statsEls.health.textContent = `${Math.round(state.health)}%`;
+          statsEls.oxygen.textContent = `${Math.round(state.oxygen)}%`;
+          statsEls.water.textContent = `${Math.round(state.water)}%`;
+        }
+      }
+
+      function drawBackground() {
+        const gradient = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
+        gradient.addColorStop(0, "#060b14");
+        gradient.addColorStop(1, "#150307");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+        ctx.save();
+        ctx.globalAlpha = 0.12;
+        ctx.fillStyle = "#f2a766";
+        for (let i = 0; i < GAME_WIDTH; i += 80) {
+          ctx.fillRect(i, 0, 4, GAME_HEIGHT);
+        }
+        ctx.restore();
+
+        ctx.save();
+        ctx.globalAlpha = 0.2;
+        ctx.strokeStyle = "rgba(255,255,255,0.05)";
+        ctx.lineWidth = 2;
+        for (let y = 120; y < GAME_HEIGHT; y += 48) {
+          ctx.beginPath();
+          ctx.moveTo(60, y);
+          ctx.lineTo(GAME_WIDTH - 60, y + 16);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function drawPlayer() {
+        const player = state.player;
+        ctx.save();
+        ctx.translate(player.x + player.width / 2, player.y + player.height / 2);
+        ctx.fillStyle = "#3ec5ff";
+        ctx.shadowColor = "#3ec5ff";
+        ctx.shadowBlur = 16;
+        ctx.beginPath();
+        roundRect(ctx, -player.width / 2, -player.height / 2, player.width, player.height, 10);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function drawFires() {
+        ctx.save();
+        state.fires.forEach((fire) => {
+          const gradient = ctx.createRadialGradient(fire.x, fire.y, fire.radius * 0.2, fire.x, fire.y, fire.radius);
+          gradient.addColorStop(0, "rgba(255,255,255,0.9)");
+          gradient.addColorStop(0.4, "#ffb347");
+          gradient.addColorStop(1, "rgba(255, 56, 0, 0.8)");
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(fire.x, fire.y, fire.radius, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        ctx.restore();
+      }
+
+      function drawCivilians() {
+        ctx.save();
+        ctx.shadowColor = "#ffeea8";
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = "#ffeea8";
+        state.civilians.forEach((civilian) => {
+          ctx.beginPath();
+          roundRect(ctx, civilian.x, civilian.y, civilian.width, civilian.height, 8);
+          ctx.fill();
+        });
+        ctx.restore();
+      }
+
+      function drawSpray() {
+        if (!(input.spray && state.water > 1)) return;
+        const player = state.player;
+        const baseX = player.x + player.width / 2;
+        const baseY = player.y;
+        ctx.save();
+        ctx.globalAlpha = 0.8;
+        const gradient = ctx.createLinearGradient(baseX, baseY, baseX, baseY - SPRAY_RANGE);
+        gradient.addColorStop(0, "rgba(78, 206, 255, 0.5)");
+        gradient.addColorStop(1, "rgba(148, 241, 255, 0)");
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.moveTo(baseX - 32, baseY);
+        ctx.lineTo(baseX + 32, baseY);
+        ctx.lineTo(baseX + 12, baseY - SPRAY_RANGE);
+        ctx.lineTo(baseX - 12, baseY - SPRAY_RANGE);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function roundRect(context, x, y, width, height, radius) {
+        const r = Math.min(radius, width / 2, height / 2);
+        context.moveTo(x + r, y);
+        context.lineTo(x + width - r, y);
+        context.quadraticCurveTo(x + width, y, x + width, y + r);
+        context.lineTo(x + width, y + height - r);
+        context.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+        context.lineTo(x + r, y + height);
+        context.quadraticCurveTo(x, y + height, x, y + height - r);
+        context.lineTo(x, y + r);
+        context.quadraticCurveTo(x, y, x + r, y);
+      }
+
+      function drawFrame() {
+        drawBackground();
+        drawFires();
+        drawCivilians();
+        drawSpray();
+        drawPlayer();
+        ctx.fillStyle = "rgba(8, 8, 12, 0.24)";
+        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+      }
+
+      function checkEndState() {
+        if (state.health <= 0 || state.oxygen <= 0) {
+          state.running = false;
+          summaryBox.style.display = "block";
+          summaryBox.innerHTML = `Score: <strong>${Math.round(state.score).toLocaleString()}</strong><br/>Survival Time: <strong>${state.time.toFixed(
+            1
+          )}s</strong><br/>Civilians Rescued: <strong>${state.rescues}</strong>`;
+          overlay.style.display = "flex";
+          startButton.textContent = "REDEPLOY";
+        }
+      }
+
+      function loop(timestamp) {
+        if (!state.running) return;
+        if (!state.lastTime) state.lastTime = timestamp;
+        const dt = clamp((timestamp - state.lastTime) / 1000, 0, 0.12);
+        state.lastTime = timestamp;
+        updatePlayer(dt);
+        updateFires(dt);
+        updateCivilians(dt);
+        updateResources(dt);
+        handleCollisions();
+        updateHud(dt);
+        drawFrame();
+        checkEndState();
+        if (state.running) requestAnimationFrame(loop);
+      }
+
+      function startGame() {
+        resetState();
+        state.running = true;
+        overlay.style.display = "none";
+        summaryBox.style.display = "none";
+        startButton.textContent = "RESUME";
+        drawBackground();
+        requestAnimationFrame(loop);
+      }
+
+      window.addEventListener("keydown", handleKeyDown);
+      window.addEventListener("keyup", handleKeyUp);
+      startButton.addEventListener("click", startGame);
+
+      drawBackground();
+    </script>
+  </body>
+</html>
